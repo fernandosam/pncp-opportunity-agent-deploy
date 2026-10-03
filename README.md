@@ -29,13 +29,13 @@ Configure `RESEND_API_KEY`/remetente em `.env.app` e `.env.worker` para autentic
 
 ## Worker opt-in
 
-Worker não inicia no boot padrão. Somente após conferir tenant IDs, credenciais, fontes, ledger e orçamento:
+Worker não inicia no boot padrão. A reconciliação sem importação foi concluída: [relatório](docs/data-reconciliation.md). Este é um banco novo/vazio; importação não é requisito. Antes de ligar, cadastrar empresa/responsável/perfil reais e conferir tenant IDs, credenciais, fontes e orçamento autorizado:
 
 ```bash
 docker compose --profile worker up -d worker
 ```
 
-Edite `WORKER_COMPANY_IDS`, `OPENAI_API_KEY` e limites em `.env.worker`; mantenha o mesmo segredo de feedback da web. Defaults conservadores: v3, US$ 0,034/interpretação, US$ 0,20/dia, 4 avaliações/run. **US$ 0,20/dia não é autorização para consumo autônomo ou para resetar o teto total do ensaio anterior.** O ensaio antigo continua suspenso; custos desconhecidos, claims e idempotência devem ser importados, não zerados. Smoke do worker usa NODE_ENV=test, sem LLM/e-mail.
+Edite `WORKER_COMPANY_IDS`, `OPENAI_API_KEY` e limites em `.env.worker`; mantenha o mesmo segredo de feedback da web. Defaults conservadores: v3, US$ 0,034/interpretação, US$ 0,20/dia, 4 avaliações/run. **US$ 0,20/dia não é autorização para consumo autônomo ou para resetar o teto total do ensaio anterior.** O ensaio antigo continua suspenso; custos desconhecidos do histórico permanecem registrados nas evidências, não são cancelados pelo banco novo. Não retomar/reexecutar o ensaio antigo usando um ledger vazio. Smoke do worker usa NODE_ENV=test, sem LLM/e-mail.
 
 ## HTTPS público
 
@@ -59,7 +59,17 @@ docker compose --profile backups up -d backup-scheduler
 
 `pg_dump` PG18 → age por pipe, sem dump plaintext, arquivo temporário promovido atomicamente; expurgo somente após sucesso (`-mtime +6`). Backups em `./backups` (600/700). Alertar ausência/stale/falha, copiar cifrados para o PC/cofre conforme política aceita. Volume Docker não é backup; perder o host sem cópia perde dados. Validar restore/RTO/RPO; não assumir PITR.
 
-## Restore/rehearsal e migração dos dados Railway
+## Reconciliação sem importação (decisão atual)
+
+O usuário dispensou a importação. O banco Docker é intencionalmente novo; a auditoria read-only confirmou 14 migrations, 21 tabelas (20 de negócio vazias), 19 RLS e zero constraints não validadas. Histórico Railway foi reconciliado pelas evidências finais disponíveis, preservando US$ 0,152960 de compromisso conservador e três reservas desconhecidas. Ver [relatório completo](docs/data-reconciliation.md).
+
+```bash
+./scripts/reconcile.sh  # somente contagens/metadados, sem mutação nem payloads
+```
+
+Não há empresa/perfil/credenciais configurados; worker continua desligado. Novas operações reais exigem dados reais e orçamento autorizado — não assumir novo saldo pelo ledger vazio.
+
+## Restore/rehearsal e importação opcional futura
 
 Não ativar cobrança Railway, excluir seu volume nem restaurar sobre banco ativo. O trial expirado deixou o volume original preservado. Obter snapshot íntegro/autorizado ou selecionar backup cifrado com **RPO explicitamente aceito**; um backup anterior pode não conter as quatro avaliações recentes nem o ledger mais novo. **Bootstrap vazio não significa que os dados Railway foram migrados.**
 
