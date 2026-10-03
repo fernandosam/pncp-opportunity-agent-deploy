@@ -1,0 +1,8 @@
+.git
+.env
+.env.*
+.secrets
+backups
+*.log
+*.age
+*.dump

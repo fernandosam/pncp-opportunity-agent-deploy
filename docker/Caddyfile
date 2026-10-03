@@ -1,0 +1,9 @@
+{$PUBLIC_HOST} {
+  # No access log: magic-link and feedback query strings are capabilities.
+  reverse_proxy web:3000
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+    -Server
+  }
+}

@@ -1,0 +1,144 @@
+name: pncp-opportunity-agent
+
+x-app: &app
+  image: pncp-opportunity-agent-web:${APP_IMAGE_TAG:-local}
+  environment:
+    APP_URL: ${APP_URL:-http://localhost:3000}
+  build:
+    context: ${APP_SOURCE:-../pncp-opportunity-agent}
+    target: runtime
+  env_file: .env.app
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=256m
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  depends_on:
+    database:
+      condition: service_healthy
+  networks: [private, outbound]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  database:
+    image: pncp-opportunity-agent-database:${APP_IMAGE_TAG:-local}
+    build: docker/postgres
+    env_file: .env.database
+    restart: unless-stopped
+    shm_size: 256mb
+    volumes:
+      # PostgreSQL 18 stores PGDATA under /var/lib/postgresql/18/docker.
+      - database:/var/lib/postgresql
+      - ./.secrets/database.crt:/run/secrets/database.crt:ro
+      - ./.secrets/database.key:/run/secrets/database.key:ro
+    tmpfs: [/run/pncp-tls]
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U pncp_admin -d pncp_opportunity_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  migrate:
+    <<: *app
+    profiles: [maintenance]
+    image: pncp-opportunity-agent-migrate:${APP_IMAGE_TAG:-local}
+    build:
+      context: ${APP_SOURCE:-../pncp-opportunity-agent}
+      target: migrate
+    env_file: .env.migrate
+    restart: "no"
+    volumes:
+      - ./docker/grant-runtime.mjs:/operations/grant-runtime.mjs:ro
+    command: [sh, -c, "node node_modules/tsx/dist/cli.mjs scripts/migrate.ts && node /operations/grant-runtime.mjs"]
+
+  web:
+    <<: *app
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /app/.next/cache:rw,nosuid,size=256m,uid=1000,gid=1000
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    <<: *app
+    profiles: [worker]
+    image: pncp-opportunity-agent-worker:${APP_IMAGE_TAG:-local}
+    build:
+      context: ${APP_SOURCE:-../pncp-opportunity-agent}
+      target: worker
+    env_file: .env.worker
+    # Cooperative drain; hard kills can leave unknown-cost reservations.
+    stop_grace_period: 1h
+
+  edge:
+    image: caddy:2.11-alpine
+    profiles: [edge]
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [outbound]
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+
+  backup:
+    profiles: [maintenance]
+    image: pncp-opportunity-agent-backup:${APP_IMAGE_TAG:-local}
+    build: docker/backup
+    env_file: .env.backup
+    volumes:
+      - ./backups:/backups
+      - ./.secrets/database.crt:/run/secrets/database.crt:ro
+      - ./.secrets/backup.recipient:/run/secrets/backup.recipient:ro
+    networks: [private]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  backup-scheduler:
+    profiles: [backups]
+    image: pncp-opportunity-agent-backup:${APP_IMAGE_TAG:-local}
+    build: docker/backup
+    env_file: .env.backup
+    entrypoint: [bash, /usr/local/bin/pncp-backup-schedule]
+    volumes:
+      - ./backups:/backups
+      - ./.secrets/database.crt:/run/secrets/database.crt:ro
+      - ./.secrets/backup.recipient:/run/secrets/backup.recipient:ro
+    networks: [private]
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  private:
+    internal: true
+  outbound:
+
+volumes:
+  database:
+  caddy_data:
+  caddy_config:

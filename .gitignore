@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+.secrets/
+backups/
+*.log
+*.age
+*.dump
+*.sql
