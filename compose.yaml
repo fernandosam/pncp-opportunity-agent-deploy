@@ -89,7 +89,7 @@ services:
     profiles: [edge]
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
-    ports: ["80:80", "443:443", "443:443/udp"]
+    ports: ["${EDGE_BIND:-127.0.0.1}:80:80", "${EDGE_BIND:-127.0.0.1}:443:443", "${EDGE_BIND:-127.0.0.1}:443:443/udp"]
     volumes:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

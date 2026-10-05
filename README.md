@@ -29,6 +29,8 @@ Configure `RESEND_API_KEY`/remetente em `.env.app` e `.env.worker` para autentic
 
 ## Worker opt-in
 
+**Estado do onboarding:** tenant/responsável/perfil provisionados e credenciais preparadas, mas login pré-auth bloqueado por RLS sob role restrita. Migration aguarda aprovação humana; não ligar worker nem usar superuser como contorno. HTTPS local: `https://localhost`, CA local sem trust global automático. [Evidências](docs/local-onboarding.md).
+
 Worker não inicia no boot padrão. A reconciliação sem importação foi concluída: [relatório](docs/data-reconciliation.md). Este é um banco novo/vazio; importação não é requisito. Antes de ligar, cadastrar empresa/responsável/perfil reais e conferir tenant IDs, credenciais, fontes e orçamento autorizado:
 
 ```bash
@@ -67,7 +69,7 @@ O usuário dispensou a importação. O banco Docker é intencionalmente novo; a 
 ./scripts/reconcile.sh  # somente contagens/metadados, sem mutação nem payloads
 ```
 
-Não há empresa/perfil/credenciais configurados; worker continua desligado. Novas operações reais exigem dados reais e orçamento autorizado — não assumir novo saldo pelo ledger vazio.
+Esse snapshot antecede o cadastro autorizado. Agora há um tenant/responsável/perfil e credenciais preparadas, porém autenticação pré-auth está bloqueada por RLS (ver onboarding). Worker continua desligado/allowlist vazia. Novas operações exigem correção aprovada e orçamento autorizado — não assumir novo saldo pelo ledger vazio.
 
 ## Restore/rehearsal e importação opcional futura
 

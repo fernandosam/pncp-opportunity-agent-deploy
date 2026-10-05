@@ -6,7 +6,9 @@ Solicitação explícita: **“Fazer a reconciliação dos dados. Não precisa i
 
 O Docker é tratado como ambiente novo. Importação/cutover do histórico Railway deixou de ser requisito para este ambiente. Não foram importados registros, criadas empresas/perfis fictícios, alterados dados do banco antigo, apagados volumes nem liberadas reservas. Nenhum worker/provedor foi ativado.
 
-## Banco Docker — verificado em snapshot read-only
+## Banco Docker — baseline anterior ao provisionamento
+
+Snapshot read-only da reconciliação inicial. Posteriormente o usuário autorizou cadastrar empresa/responsável e reutilizar somente o perfil comercial: [onboarding atual](local-onboarding.md). Os números vazios abaixo descrevem o baseline, não o estado posterior ao cadastro.
 
 `./scripts/reconcile.sh` lê somente metadados/contagens, em REPEATABLE READ/READ ONLY, sem payloads, tokens, e-mails ou senhas.
 
