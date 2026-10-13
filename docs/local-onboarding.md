@@ -1,4 +1,4 @@
-# Provisionamento local — cadastro pronto, autenticação bloqueada por RLS
+# Provisionamento local — cadastro pronto, pré-auth corrigido; aceite de login pendente
 
 Pedido do usuário: executar cadastro/perfil/configuração e ensaio controlado, reutilizando perfil anterior. O schema atual não armazena nome legal/CNPJ: `companies` exige id/fuso; `responsible_users` exige id/company_id/email. Não foram inventados dados legais.
 
@@ -11,7 +11,7 @@ Pedido do usuário: executar cadastro/perfil/configuração e ensaio controlado,
 - HTTPS local Caddy em https://localhost, portas 80/443 publicadas somente em 127.0.0.1 por padrão; APP_URL alinhado. CA local exportada para `.secrets/web-ca.crt`, chain/hostname verificados com curl --cacert, sem -k. Nenhuma CA instalada globalmente no sistema/navegador.
 - Banco/web healthy, HTTPS readiness ready, smoke TLS/RLS/worker NODE_ENV=test passou.
 
-## Bloqueio comprovado, não delivery/session comprovados
+## Bloqueio histórico comprovado (superado pela migration 015 local)
 
 O formulário retornou resposta genérica de não enumeração. Auditoria posterior: **magic_link_tokens=0, sessions=0, ledger LLM=0**. Essa resposta NÃO comprova envio, entrega ou login.
 
@@ -22,10 +22,18 @@ Prova nativa PostgreSQL read-only com o próprio `PgAuthRepository`:
 
 Causa: `PgAuthRepository` usa consultas globais pré-autenticação, mas as políticas existentes permitem somente tenant já conhecido. Também é necessário proteger criação/consumo de magic link e resolução/revogação de sessão no fluxo pré-auth. Não resolver com superuser/BYPASSRLS no runtime nem política USING(true).
 
-A correção exige acesso pré-auth restrito por e-mail/hash/capability e transações/contexto seguros, com testes sob role non-superuser. **Migration/alteração de schema não aplicada: aguarda aprovação humana explícita para o Docker local.**
+A correção exige acesso pré-auth restrito por e-mail/hash/capability e transações/contexto seguros, com testes sob role non-superuser. **Na prova histórica, a migration não estava autorizada/aplicada.** O usuário posteriormente autorizou explicitamente preparar/aplicar a correção somente no Docker local (#31).
 
-## Segurança operacional até a correção
+## Correção local autorizada e aplicada
+
+Migration `015_auth_capability_rls`: três policies SELECT-only por hash de e-mail/link/sessão, sem superuser/BYPASSRLS/SECURITY DEFINER e sem alteração de grants; FKs compostas validam concordância empresa/responsável. Adapter pré-auth verifica a capability antes de vincular tenant em transação local. Readiness passa a exigir 015. Callback usa redirects relativos para preservar HTTPS/localhost atrás do proxy.
+
+Backup age criado antes da aplicação; ensaio PostgreSQL 18 em projeto Compose isolado comprovou um vencedor em resgate concorrente, replay/expiração/revogação/isolamento e down/up sem apagar dados, com role runtime real non-superuser/NOBYPASSRLS e zero provedores. Fixtures isoladas não são delivery/login reais. Banco local após aplicação: 15 migrations/19 tabelas com RLS forçada, responsável encontrado por lookup restrito, leituras sem contexto vazias; tokens/sessões reais continuam zero. Database/edge preservados, somente web recriado; worker desligado. Imagem de rollback retida `pncp-opportunity-agent-web:rollback-auth-015`.
+
+Detalhes/invariantes/rollback: `../pncp-opportunity-agent/docs/runbooks/autenticacao-local.md`. Ainda falta o usuário solicitar/receber/abrir o link e confirmar sessão/perfil em HTTPS; nenhuma sessão real foi fabricada nem provedor chamado pelos testes. Mudança não aplicada em Railway/produção; commit local não equivale a push/CI/§10.
+
+## Segurança operacional e aceite humano pendente
 
 Worker automático desligado; allowlist foi novamente esvaziada para impedir ativação acidental. Credenciais preparadas não autorizam daemon. Limites preparados: uma avaliação, US$ 0,034/interpretação e US$ 0,034/dia. Isso é apenas teto técnico, não renovação do ensaio/global budget. ZERO chamadas LLM; nenhuma sessão/token fabricada ou auth forjada.
 
-Após aprovação/correção: testar request→e-mail real→redeem único→sessão→perfil autenticado; navegador precisa confiar na CA local (decisão de trust separada). Só então executar ensaio único controlado com fontes novas e sem repetir registros do histórico, preservando teto global antigo. Produção/§10 continuam sem aprovação.
+Após a correção local, validar humanamente request→e-mail real→redeem único→sessão→perfil autenticado; navegador precisa confiar na CA local (decisão de trust separada). Só então executar ensaio único controlado com fontes novas e sem repetir registros do histórico, preservando teto global antigo. Produção/§10 continuam sem aprovação.
