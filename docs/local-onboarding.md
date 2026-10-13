@@ -32,6 +32,14 @@ Backup age criado antes da aplicação; ensaio PostgreSQL 18 em projeto Compose 
 
 Detalhes/invariantes/rollback: `../pncp-opportunity-agent/docs/runbooks/autenticacao-local.md`. Ainda falta o usuário solicitar/receber/abrir o link e confirmar sessão/perfil em HTTPS; nenhuma sessão real foi fabricada nem provedor chamado pelos testes. Mudança não aplicada em Railway/produção; commit local não equivale a push/CI/§10.
 
+## Correção da configuração efetiva de envio após teste humano
+
+O usuário solicitou um link, mas não recebeu. Telemetria registrou `AUTH_EMAIL_DELIVERY_FAILED` antes da chamada ao provedor: o web em produção usava APP_URL HTTP. O `environment.APP_URL` do Compose sobrescrevia o HTTPS de `.env.app` com o valor antigo de `.env`.
+
+Corrigido **somente o arquivo privado `.env`** para `APP_URL='https://localhost'` (chmod600), recriando apenas web; database/edge IDs/imagens preservados, worker desligado, health/ready e origem HTTPS efetiva confirmados. Prova de configuração com o sender real em container sem rede, fetch mock e destinatário/token explicitamente de fixture passou; zero provedores e zero escrita em banco. Isso não comprova validade da chave/entrega: o usuário deve solicitar um link novo e confirmar recebimento/acesso.
+
+Para este Compose, **`.env` é a origem efetiva de APP_URL**; mudar somente `.env.app` não basta. Sempre conferir a configuração efetiva do web após recriação, sem imprimir env/secrets. Não contornar a exigência HTTPS nem ampliar a chave Resend.
+
 ## Segurança operacional e aceite humano pendente
 
 Worker automático desligado; allowlist foi novamente esvaziada para impedir ativação acidental. Credenciais preparadas não autorizam daemon. Limites preparados: uma avaliação, US$ 0,034/interpretação e US$ 0,034/dia. Isso é apenas teto técnico, não renovação do ensaio/global budget. ZERO chamadas LLM; nenhuma sessão/token fabricada ou auth forjada.
