@@ -42,7 +42,15 @@ Para este Compose, **`.env` é a origem efetiva de APP_URL**; mudar somente `.en
 
 ## Aceite humano registrado
 
-Após a correção da origem HTTPS, o usuário informou “Funcionou” e confirmou explicitamente que abriu o link e acessou o perfil. Recebimento/resgate/acesso reais aceitos **no Docker local**, por confirmação humana; sem captura de tokens/cookies, métricas ou provas de delivery inventadas. #31 concluída nesse escopo, sem liberação de produção/§10. Dashboard real e fluxo de briefing/feedback/Precision@K permanecem pendentes.
+Após a correção da origem HTTPS, o usuário informou “Funcionou” e confirmou explicitamente que abriu o link e acessou o perfil. Recebimento/resgate/acesso reais aceitos **no Docker local**, por confirmação humana; sem captura de tokens/cookies, métricas ou provas de delivery inventadas. #31 concluída nesse escopo, sem liberação de produção/§10. Dashboard com leitura real foi entregue localmente em #39 (ver abaixo); fluxo legítimo de briefing/feedback/Precision@K permanece pendente.
+
+## Dashboard de briefings aplicado no web local
+
+Commit local da aplicação `1650e82` (#39): leitura por empresa autenticada, sete briefings por página, histórico por data e itens ordenados ligados ao detalhe. Estados separados para ausência, falha, data inválida e carregamento; score/ação/motivos/riscos da seleção histórica, objeto/prazo da publicação atual, sem alegar entrega. Runbook/contrato: `../pncp-opportunity-agent/docs/dashboard-v1.md`.
+
+115 unitários/174 integrações (serial)/83 E2E, tipos/lint/build passaram. Fixtures inspecionadas em 320/375/768/1440 e texto ampliado, sem gravar dados fictícios no runtime. Web reconstruído por git archive/recriado, database/edge IDs e imagens preservados, worker desligado; HTTPS/health/ready e APP_URL HTTPS confirmados, rollback `pncp-opportunity-agent-web:rollback-dashboard-1650e82` retido. Com loading, o GET anônimo pode retornar HTTP200 streaming com redirect para /login; teste verificou redirect e ausência de dados tenant, e E2E confirmou chegada ao login.
+
+Inspeção PostgreSQL18 read-only com role runtime non-superuser/NOBYPASSRLS e contexto de sessão já criada/confirmada pelo usuário: consulta real retorna zero briefings, sem alteração de sessões/registros/migrations (15). Não é prova nova de cookie no navegador nem de briefing positivo. Nenhum provedor, migração, importação, processamento, sessão ou feedback artificial executado. Usuário pode atualizar /dashboard para revisar o empty state real; amostra/entrega/feedback reais ainda dependem de ensaio e orçamento explicitamente autorizados. Sem push/CI do commit ou deploy externo.
 
 ## Segurança operacional preservada
 
