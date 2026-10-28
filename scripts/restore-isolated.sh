@@ -20,4 +20,20 @@ docker compose -p "$project" --profile maintenance run --rm --no-deps -T \
     --username pncp_admin --dbname pncp_opportunity_agent --no-owner --no-acl \
     --clean --if-exists --single-transaction --exit-on-error
 docker compose -p "$project" --profile maintenance run --rm migrate
-echo 'Restore completed in isolated project. Volumes retained; source unchanged.'
+# Post-restore metadata verification (not tenant payloads or credentials).
+# Require auth migration 015, forced RLS for every public tenant table and a restricted runtime role.
+verified=$(docker compose -p "$project" exec -T database psql -v ON_ERROR_STOP=1 \
+  -U pncp_admin -d pncp_opportunity_agent -Atc "
+  select case when
+    exists (select 1 from public.schema_migrations where name='015_auth_capability_rls.up.sql')
+    and exists (select 1 from pg_roles where rolname='pncp_app' and not rolsuper and not rolbypassrls)
+    and exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='public' and c.relname='company_opportunities' and c.relrowsecurity and c.relforcerowsecurity)
+    and not exists (
+      select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      join pg_attribute a on a.attrelid=c.oid and a.attname='company_id' and a.attnum>0 and not a.attisdropped
+      where n.nspname='public' and c.relkind in ('r','p') and (not c.relrowsecurity or not c.relforcerowsecurity)
+    )
+  then 'ok' else 'fail' end;")
+[[ "$verified" == ok ]] || { echo 'Restore postflight failed: migration 015, forced tenant RLS or least-privilege role missing.' >&2; exit 1; }
+echo 'Restore completed in isolated project. Migration 015, forced tenant RLS and runtime privileges verified; volumes retained and source unchanged.'
