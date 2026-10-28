@@ -5,6 +5,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/fixture/scripts" "$tmp/fixture/backups" "$tmp/bin"
 cp "$root"/scripts/check-{backup-health,stack-readonly,app-local}.sh "$tmp/fixture/scripts/"
+for script in "$root"/scripts/check-{backup-health,stack-readonly,app-local}.sh; do bash -n "$script"; done
+# GitHub Contents API creates files with mode 0644; execute copies explicitly.
+chmod +x "$tmp/fixture/scripts/"*.sh
 printf '%s\n' '// smoke input fixture' > "$tmp/fixture/scripts/smoke.mjs"
 check_backup="$tmp/fixture/scripts/check-backup-health.sh"
 check_stack="$tmp/fixture/scripts/check-stack-readonly.sh"
