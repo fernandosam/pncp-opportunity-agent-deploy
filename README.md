@@ -29,7 +29,7 @@ Configure `RESEND_API_KEY`/remetente em `.env.app` e `.env.worker` para autentic
 
 ## Worker opt-in
 
-**Estado do onboarding:** tenant/responsável/perfil provisionados e credenciais preparadas, mas login pré-auth bloqueado por RLS sob role restrita. Migration aguarda aprovação humana; não ligar worker nem usar superuser como contorno. HTTPS local: `https://localhost`, CA local sem trust global automático. [Evidências](docs/local-onboarding.md).
+**Estado do onboarding (2026-10-14):** migration de autenticação `015_auth_capability_rls` aplicada **somente no Docker local**; recebimento do magic link, login HTTPS e acesso ao perfil confirmados pelo responsável. O dashboard tenant-scoped foi implantado localmente, mas não havia briefings reais persistidos. Worker continua desligado, allowlist vazia e fluxo positivo/entrega/feedback/Precision@K não comprovados. Não extrapolar a aprovação local da #31 para produção. [Evidências](docs/local-onboarding.md).
 
 Worker não inicia no boot padrão. A reconciliação sem importação foi concluída: [relatório](docs/data-reconciliation.md). Este é um banco novo/vazio; importação não é requisito. Antes de ligar, cadastrar empresa/responsável/perfil reais e conferir tenant IDs, credenciais, fontes e orçamento autorizado:
 
@@ -69,7 +69,7 @@ O usuário dispensou a importação. O banco Docker é intencionalmente novo; a 
 ./scripts/reconcile.sh  # somente contagens/metadados, sem mutação nem payloads
 ```
 
-Esse snapshot antecede o cadastro autorizado. Agora há um tenant/responsável/perfil e credenciais preparadas, porém autenticação pré-auth está bloqueada por RLS (ver onboarding). Worker continua desligado/allowlist vazia. Novas operações exigem correção aprovada e orçamento autorizado — não assumir novo saldo pelo ledger vazio.
+Esse snapshot antecede o cadastro autorizado. O Docker local já contém tenant/responsável/perfil e a autenticação RLS foi corrigida pela migration 015, com login real confirmado (ver onboarding). Worker continua desligado e allowlist vazia. Novas operações exigem orçamento e ativação explicitamente autorizados — não assumir novo saldo pelo ledger vazio.
 
 ## Restore/rehearsal e importação opcional futura
 
@@ -80,6 +80,19 @@ Não ativar cobrança Railway, excluir seu volume nem restaurar sobre banco ativ
 ```
 
 O script exige projeto `pncp-restore-*`, recusa destino que contenha objetos de usuário, usa stream age→pg_restore em transação e preserva volumes/origem. Restore só em banco novo, com PG18. Validar contagens, migrations, políticas RLS, tenant/session, reservas desconhecidas, claims/outbox/feedback e backup. Aplicar o grant de runtime após importação. Após aceite humano, escolha esse projeto restaurado para o cutover e configure porta/envs; não sobrescreva o banco novo já usado por outro ambiente.
+
+## Preflight entre aplicação e Docker (somente leitura)
+
+Antes de qualquer release, selecione e revise o **SHA completo da aplicação** no repositório irmão. No arquivo privado `.env` do deploy, configure `APP_IMAGE_TAG` com esse mesmo SHA, `APP_SOURCE` com o checkout correto e `APP_URL` com o domínio público HTTPS aprovado. O Compose usa `environment.APP_URL` e **sobrescreve o valor de `.env.app`**; conferir somente `.env.app` não é suficiente.
+
+```bash
+# Inspeção local: nenhum build, migration, chamada externa ou ativação do worker.
+bash scripts/release-preflight.sh <SHA_COMPLETO_DA_APLICACAO>
+```
+
+O preflight exige worktrees Git limpas, checkout da aplicação no SHA informado, `APP_IMAGE_TAG` idêntica ao SHA, `APP_URL` HTTPS não-localhost e `docker compose config --quiet`, sem imprimir segredos. Ele **não verifica nem substitui** CI verde no SHA, imagens compiladas, prova E2E real, restauração/retention, autorização de orçamento ou assinatura humana da [issue #25](https://github.com/fernandosam/pncp-opportunity-agent/issues/25). O smoke `./scripts/smoke.sh` valida a migration de autenticação 015 e RLS forçada, independentemente de migrations aditivas futuras. A execução requer o Docker do ambiente e serviços efetivamente iniciados.
+
+A validação do release é comandada pelo código da aplicação: `pnpm release:gate preflight`, decisão humana na #25 e `pnpm release:gate verify`. Não executar `up`, `migrate`, `backup-scheduler` ou ativar o worker como consequência de um preflight positivo.
 
 ## Releases, rollback e operação
 
