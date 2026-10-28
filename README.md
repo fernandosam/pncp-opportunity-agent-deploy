@@ -79,7 +79,7 @@ Não ativar cobrança Railway, excluir seu volume nem restaurar sobre banco ativ
 ./scripts/restore-isolated.sh pncp-restore-review /path/snapshot.dump.age /path/identity.txt
 ```
 
-O script exige projeto `pncp-restore-*`, recusa destino que contenha objetos de usuário, usa stream age→pg_restore em transação e preserva volumes/origem. Restore só em banco novo, com PG18. Validar contagens, migrations, políticas RLS, tenant/session, reservas desconhecidas, claims/outbox/feedback e backup. Aplicar o grant de runtime após importação. Após aceite humano, escolha esse projeto restaurado para o cutover e configure porta/envs; não sobrescreva o banco novo já usado por outro ambiente.
+O script exige projeto `pncp-restore-*`, recusa destino que contenha objetos de usuário, usa stream age→pg_restore em transação e preserva volumes/origem. Depois de migrations/grants, exige postflight metadata-only: migration 015, role `pncp_app` não-superuser/NOBYPASSRLS, RLS habilitada/forçada em `company_opportunities` e em todas as tabelas com `company_id`. Não comunica sucesso se a verificação falhar. Restore só em banco novo, com PG18. Validar contagens, migrations, políticas RLS, tenant/session, reservas desconhecidas, claims/outbox/feedback e backup. Aplicar o grant de runtime após importação. Após aceite humano, escolha esse projeto restaurado para o cutover e configure porta/envs; não sobrescreva o banco novo já usado por outro ambiente.
 
 ## Verificação local da V1 (sem GitHub Actions)
 
@@ -87,6 +87,7 @@ Enquanto o CI da aplicação estiver indisponível por créditos, registre evid�
 
 ```bash
 bash tests/readiness-scripts.test.sh             # fixtures; sem Docker/provedores
+bash tests/restore-isolated.test.sh            # recusa destino ocupado e falhas na restauração
 APP_SHA=$(git -C ../pncp-opportunity-agent rev-parse HEAD)
 bash scripts/check-app-local.sh "$APP_SHA"        # lint, types, unit, integração, build, audit, E2E
 bash scripts/check-stack-readonly.sh             # Docker real, web/banco healthy, worker parado
