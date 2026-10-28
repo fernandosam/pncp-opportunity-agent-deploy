@@ -96,6 +96,19 @@ bash scripts/check-backup-health.sh              # frescor/permissões/retençã
 
 O verificador da aplicação executa os comandos sob `CI=1` e um ambiente isolado com placeholders para Groq, Resend e PostgreSQL; assim não herda as credenciais reais do shell e o Playwright não reutiliza um servidor anterior. Ele instala o Chromium para E2E (pode necessitar dependências do sistema e download de pacotes). **Isso não executa o fluxo positivo com provedores reais**.\n\nOs dois últimos comandos exigem Docker existente e/ou backups locais. Não inicializam serviços, não ativam worker e não chamam Groq/Resend. O check de backup não prova restauração. **Não foram executados no host do responsável nesta entrega.** Procedimentos, matriz de evidências, exercícios manuais e critérios de não-liberação: [readiness local da V1](docs/local-readiness-v1.md). A [issue #40](https://github.com/fernandosam/pncp-opportunity-agent/issues/40) mantém o bloqueio GitHub Actions para o **gate final**, após as demais validações.
 
+## Saúde operacional de backups e TLS (somente leitura)
+
+Este controle **não ativa** o agendador. Depois que o responsável configurar e iniciar explicitamente `backup-scheduler` e que uma primeira cópia real for concluída, executar:
+
+```bash
+bash tests/operations-readonly.test.sh  # OpenSSL real e Docker simulado, sem serviços
+bash scripts/check-operations-readonly.sh  # host Docker real, sem mutações
+```
+
+A inspeção exige (1) CA/certificado PostgreSQL válido para `database` e com **mais de 30 dias** até expirar, (2) diretório de segredos `0700` e chave privada `0600`, (3) contêiner `backup-scheduler` em execução, (4) backup age mais recente com até 36 horas e sem arquivos com idade >=7 dias; não imprime certificados, chaves ou `.env`. Um resultado **FAIL é esperado** no Docker local enquanto o agendador opt-in não estiver habilitado. Não usar aprovação de deploy para habilitá-lo automaticamente.
+
+Não confundir esses controles com validação de conteúdo do backup, restore com chave real, alertas externos, cópia fora do host ou retenção de registros da aplicação; continuam evidências manuais separadas na [issue #25](https://github.com/fernandosam/pncp-opportunity-agent/issues/25). Ver [readiness local](docs/local-readiness-v1.md).
+
 ## Preflight entre aplicação e Docker (somente leitura)
 
 Antes de qualquer release, selecione e revise o **SHA completo da aplicação** no repositório irmão. No arquivo privado `.env` do deploy, configure `APP_IMAGE_TAG` com esse mesmo SHA, `APP_SOURCE` com o checkout correto e `APP_URL` com o domínio público HTTPS aprovado. O Compose usa `environment.APP_URL` e **sobrescreve o valor de `.env.app`**; conferir somente `.env.app` não é suficiente.
