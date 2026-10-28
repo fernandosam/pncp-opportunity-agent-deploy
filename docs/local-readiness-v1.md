@@ -11,6 +11,7 @@ Na raiz deste repositório, com os dois checkouts irmãos:
 ```bash
 # Executa testes sintéticos dos verificadores (sem Docker ou providers reais).
 bash tests/readiness-scripts.test.sh
+bash tests/restore-isolated.test.sh            # fixtures de segurança; sem Docker real
 
 # Usar sempre o SHA completo revisado; Node.js 24, pnpm 10 e
 # Playwright/Chromium instalados são pré-requisitos do runner local.
@@ -37,7 +38,7 @@ bash scripts/check-backup-health.sh
 
 | Exercício | Como registrar evidência | Aceite |
 |---|---|---|
-| Backup / restauração | Executar `scripts/restore-isolated.sh pncp-restore-<id> <backup.age> <identity>` **somente** com identidade e arquivo local autorizados, em projeto novo sem dados; verificar migrations, RLS, contagens, tempo de recuperação. Nunca restaurar no banco ativo. | Resultado observado; RPO/RTO assinados por responsável. |
+| Backup / restauração | Executar `scripts/restore-isolated.sh pncp-restore-<id> <backup.age> <identity>` **somente** com identidade e arquivo local autorizados, em projeto novo sem dados; verificar migrations, RLS, contagens, tempo de recuperação. Nunca restaurar no banco ativo. | Verificação de pós-restore de migration 015, RLS forçada e `pncp_app` sem superuser/bypass; Resultado observado; RPO/RTO assinados por responsável. |
 | Retenção | Conferir rotina `runRetention` realmente agendada/rodada, tempos de expurgo 30d/90d/12m e exclusão de empresa em ambiente de teste, sem criar dados em produção. | Prova de expurgo e privacidade. |
 | Falha e recuperação | Em fixture de worker isolado e com provedores simulados, reproduzir lease expirado, repetição de job, timeout PNCP, schema LLM inválido e outbox em falha. | Sem job/entrega duplicados; uso/reservas incertas preservados. |
 | Acessibilidade | Inspeção real das telas de login/perfil/dashboard/detalhe/feedback em 320, 375, 768 e 1440 px, zoom 200%, teclado e leitor de tela. | Registro de defeitos, correções e aceite humano. |
@@ -57,3 +58,7 @@ Estado inicial deste pacote:
 - **Último gate (depois de créditos):** CI e Docker GitHub Actions **verdes no SHA exato**, checklist §1–9 realmente sustentado por evidências, `pnpm release:gate preflight`, aprovação humana na #25 após CI e `pnpm release:gate verify`. Sem isso, **não liberar produção**.
 
 O preflight de produção `bash scripts/release-preflight.sh <SHA>` é separado: exige `APP_IMAGE_TAG` idêntica ao SHA e `APP_URL` HTTPS público, portanto não se aplica ao bootstrap `https://localhost`.
+
+## Contratos do restore isolado (teste sem Docker real)
+
+`bash tests/restore-isolated.test.sh` executa o script contra um simulador do comando `docker`: deve rejeitar nome de projeto não isolado, arquivo/identidade ausentes, destino com objetos, falha de descriptografia, erro em pg_restore e falha do pós-check RLS. Um restore aparente não é aceito sem o postflight de migration 015, RLS de tenant forçada e runtime sem superuser/NOBYPASSRLS. O ensaio simulado **não verifica o PostgreSQL real, a identidade age, conteúdo do arquivo ou tempo de recuperação**; para satisfazer o DoD, restaurar backup real em projeto novo autorizado e registrar RTO/RPO observados.
