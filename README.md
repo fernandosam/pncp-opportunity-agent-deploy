@@ -93,7 +93,7 @@ bash scripts/check-stack-readonly.sh             # Docker real, web/banco health
 bash scripts/check-backup-health.sh              # frescor/permissões/retenção dos backups locais
 ```
 
-Os dois últimos comandos exigem Docker existente e/ou backups locais. Não inicializam serviços, não ativam worker e não chamam Groq/Resend. O check de backup não prova restauração. **Não foram executados no host do responsável nesta entrega.** Procedimentos, matriz de evidências, exercícios manuais e critérios de não-liberação: [readiness local da V1](docs/local-readiness-v1.md). A [issue #40](https://github.com/fernandosam/pncp-opportunity-agent/issues/40) mantém o bloqueio GitHub Actions para o **gate final**, após as demais validações.
+O verificador da aplicação executa os comandos sob `CI=1` e um ambiente isolado com placeholders para Groq, Resend e PostgreSQL; assim não herda as credenciais reais do shell e o Playwright não reutiliza um servidor anterior. Ele instala o Chromium para E2E (pode necessitar dependências do sistema e download de pacotes). **Isso não executa o fluxo positivo com provedores reais**.\n\nOs dois últimos comandos exigem Docker existente e/ou backups locais. Não inicializam serviços, não ativam worker e não chamam Groq/Resend. O check de backup não prova restauração. **Não foram executados no host do responsável nesta entrega.** Procedimentos, matriz de evidências, exercícios manuais e critérios de não-liberação: [readiness local da V1](docs/local-readiness-v1.md). A [issue #40](https://github.com/fernandosam/pncp-opportunity-agent/issues/40) mantém o bloqueio GitHub Actions para o **gate final**, após as demais validações.
 
 ## Preflight entre aplicação e Docker (somente leitura)
 

@@ -57,29 +57,6 @@ expect_fail env DOCKER_WORKER_RUNNING=1 "$check_stack"
 expect_fail env DOCKER_DB_HEALTH=unhealthy "$check_stack"
 expect_fail env DOCKER_INVALID_CONFIG=1 "$check_stack"
 expect_fail env DOCKER_SMOKE_FAIL=1 "$check_stack"
-# Mock pnpm/Node so quality commands are tested without installing dependencies or calling providers.
-mkdir -p "$tmp/app"
-git -C "$tmp/app" init -q
-git -C "$tmp/app" -c user.name=Fixture -c user.email=fixture@example.test commit --allow-empty -qm baseline
-app_sha=$(git -C "$tmp/app" rev-parse HEAD)
-printf 'APP_SOURCE=../app\n' > "$tmp/fixture/.env"
-cat > "$tmp/bin/node" <<'NODE'
-#!/usr/bin/env bash
-if [[ "$1" == -p ]]; then printf '24\n'; else exit 3; fi
-NODE
-cat > "$tmp/bin/pnpm" <<'PNPM'
-#!/usr/bin/env bash
-if [[ "$1" == --version ]]; then printf '10.13.1\n'; exit 0; fi
-printf '%s\n' "$*" >> "$PNPM_TRACE"
-[[ ${PNPM_FAIL_ON:-} != "$1" ]]
-PNPM
-chmod 755 "$tmp/bin/node" "$tmp/bin/pnpm"
-export PNPM_TRACE="$tmp/pnpm-trace"
-expect_pass "$check_app" "$app_sha"
-[[ $(wc -l < "$PNPM_TRACE") -eq 8 ]] || fail 'Expected all 8 local quality steps'
-expect_fail "$check_app" "$(printf '0%.0s' {1..40})"
-touch "$tmp/app/untracked"
-expect_fail "$check_app" "$app_sha"
-rm "$tmp/app/untracked"
-expect_fail env PNPM_FAIL_ON=audit "$check_app" "$app_sha"
-echo 'PASS: backup health (missing, recent, stale, insecure, expired and invalid threshold); stack pre-activation (healthy, worker active, DB unhealthy, invalid config, smoke failure); no worker activation; local app quality gates (all commands, incorrect SHA, dirty checkout, audit failure).'
+# The dedicated quality-runner contract suite covers sanitized CI env, SHA and failures.
+bash "$root/tests/check-app-local.test.sh"
+echo 'PASS: backup health (missing, recent, stale, insecure, expired and invalid threshold); stack pre-activation (healthy, worker active, DB unhealthy, invalid config, smoke failure); no worker activation.'
