@@ -81,6 +81,20 @@ Não ativar cobrança Railway, excluir seu volume nem restaurar sobre banco ativ
 
 O script exige projeto `pncp-restore-*`, recusa destino que contenha objetos de usuário, usa stream age→pg_restore em transação e preserva volumes/origem. Restore só em banco novo, com PG18. Validar contagens, migrations, políticas RLS, tenant/session, reservas desconhecidas, claims/outbox/feedback e backup. Aplicar o grant de runtime após importação. Após aceite humano, escolha esse projeto restaurado para o cutover e configure porta/envs; não sobrescreva o banco novo já usado por outro ambiente.
 
+## Verificação local da V1 (sem GitHub Actions)
+
+Enquanto o CI da aplicação estiver indisponível por créditos, registre evidências **locais** sem enfraquecer o gate de produção. Com os dois repositórios lado a lado e o SHA da aplicação revisado:
+
+```bash
+bash tests/readiness-scripts.test.sh             # fixtures; sem Docker/provedores
+APP_SHA=$(git -C ../pncp-opportunity-agent rev-parse HEAD)
+bash scripts/check-app-local.sh "$APP_SHA"        # lint, types, unit, integração, build, audit, E2E
+bash scripts/check-stack-readonly.sh             # Docker real, web/banco healthy, worker parado
+bash scripts/check-backup-health.sh              # frescor/permissões/retenção dos backups locais
+```
+
+Os dois últimos comandos exigem Docker existente e/ou backups locais. Não inicializam serviços, não ativam worker e não chamam Groq/Resend. O check de backup não prova restauração. **Não foram executados no host do responsável nesta entrega.** Procedimentos, matriz de evidências, exercícios manuais e critérios de não-liberação: [readiness local da V1](docs/local-readiness-v1.md). A [issue #40](https://github.com/fernandosam/pncp-opportunity-agent/issues/40) mantém o bloqueio GitHub Actions para o **gate final**, após as demais validações.
+
 ## Preflight entre aplicação e Docker (somente leitura)
 
 Antes de qualquer release, selecione e revise o **SHA completo da aplicação** no repositório irmão. No arquivo privado `.env` do deploy, configure `APP_IMAGE_TAG` com esse mesmo SHA, `APP_SOURCE` com o checkout correto e `APP_URL` com o domínio público HTTPS aprovado. O Compose usa `environment.APP_URL` e **sobrescreve o valor de `.env.app`**; conferir somente `.env.app` não é suficiente.
