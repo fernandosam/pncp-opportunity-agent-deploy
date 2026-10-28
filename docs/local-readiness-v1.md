@@ -34,6 +34,14 @@ bash scripts/check-backup-health.sh
 
 `check-backup-health.sh` não cria nem descriptografa backup; constata somente presença, idade, modo e expiração de arquivos `.age`. Um resultado PASS **não substitui restauração**. A agenda `backup-scheduler` é opt-in e precisa de evidência de execução/monitoramento. Backups apenas locais não protegem contra perda total do host; registrar essa decisão de risco e validar o RPO/RTO antes de produção.
 
+## 1.1. Operação contínua sem runner externo
+
+Para testar o verificador **sem host Docker**, executar `bash tests/operations-readonly.test.sh`. O script usa **OpenSSL real** para gerar certificados descartáveis e um cliente Docker simulado; confirma falha fechada para TLS com validade insuficiente (menos de 30 dias), hostname inválido, chave/diretório com permissões frouxas, contêiner do agendador inexistente/parado, Compose inválido, backup com mais de 36 horas ou idade >=7 dias e backup com modo inseguro. Não inicia contêineres.
+
+No host já provisionado, `bash scripts/check-operations-readonly.sh` observa esses mesmos invariantes. **Depende de ativação humana prévia do serviço opt-in `backup-scheduler`** e de uma cópia concluída. Enquanto esses critérios não forem verdadeiros, a falha é correta e não significa que a aplicação foi danificada. Certificados locais do banco são criados com um ano de validade; antes de 30 dias da expiração, decidir rotação segura com plano de rollback, sem alterar chaves no banco ativo por conta desse check.
+
+Este check não comprova decrypt/restore, PITR, cópia externa, notificações entregues, execução do expurgo de dados pelo worker, recuperação de jobs ou acerto do RTO/RPO. Registre saída segura e evidências da execução real na #25; a verificação e a intervenção devem permanecer separadas.
+
 ## 2. Exercícios em ambiente isolado — com operador no host
 
 | Exercício | Como registrar evidência | Aceite |
