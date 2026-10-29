@@ -49,17 +49,27 @@ docker compose --profile edge up -d edge
 
 Caddy gerencia TLS e encaminha para web; access log desligado para não registrar magic-link/feedback query strings. Web permanece em loopback; não publicar PostgreSQL. CDNs/APM/proxies externos ainda exigem revisão de redação. Nenhum domínio/produção/cobrança é ativado pelo bootstrap.
 
-## Backups cifrados — retenção 7 dias
+## Backups cifrados — operação simplificada
 
-Obtenha/crie uma identidade age **fora do Git**, guarde no cofre e em cópia fora deste host. Grave somente seu destinatário público `age1...` em `.secrets/backup.recipient` (600). A chave privada não é montada no serviço de backup.
+O utilitário [`backupctl`](backupctl) é a interface única para verificar a saúde, criar, listar e **testar a restauração** de backups age. Usa os scripts existentes por trás da interface; não altera schema, não ativa worker, não chama Groq/Resend, não exige GitHub Actions.
 
 ```bash
-./scripts/backup.sh
-# Agenda diária 03:30 UTC, explicitamente opt-in:
-docker compose --profile backups up -d backup-scheduler
+./backupctl status                    # TLS, agendador e cópia recente (somente leitura)
+./backupctl list                      # nomes, tamanhos e timestamps dos backups cifrados
+./backupctl run                       # backup agora; depois aplica a retenção de sete dias
+./backupctl verify --identity /caminho/privado/age-identity.txt
+# Opcional: descarta somente o novo volume isolado após SUCESSO da verificação:
+./backupctl verify --identity /caminho/privado/age-identity.txt --cleanup
+
+# Teste do próprio utilitário sem Docker ou segredos reais:
+bash tests/backupctl.test.sh
 ```
 
-`pg_dump` PG18 → age por pipe, sem dump plaintext, arquivo temporário promovido atomicamente; expurgo somente após sucesso (`-mtime +6`). Backups em `./backups` (600/700). Alertar ausência/stale/falha, copiar cifrados para o PC/cofre conforme política aceita. Volume Docker não é backup; perder o host sem cópia perde dados. Validar restore/RTO/RPO; não assumir PITR.
+`verify` escolhe o arquivo mais recente ou aceita `--backup /caminho/arquivo.dump.age`, cria um projeto `pncp-restore-check-*` novo, usa `restore-isolated.sh` para descriptografar/ restaurar e verificar migration 015, RLS forçada e role de menor privilégio; imprime a duração observada. **Não restaura o banco ativo**. Por segurança o volume de teste é **preservado por padrão**; `--cleanup` precisa ser solicitado explicitamente e só atua após sucesso. Com falha, o ambiente isolado é preservado para diagnóstico. É necessário acesso à identidade age privada em arquivo local com modo 600/400; ela não é copiada para o Git.
+
+O agendador diário existente roda às **03:30 UTC**, com opt-in já ativado pelo operador. Se ainda estiver desligado em outro host, sua ativação permanece decisão separada: `docker compose --profile backups up -d backup-scheduler`. O armazenamento cifrado fica em `./backups`, retenção máxima sete dias; o arquivo mais recente não prova restore. A integridade do restore precisa ser validada com **backup real no host**, não só com fixtures. O teste não comprova PITR, cópia off-host, RPO/RTO aceitáveis ou alertas externos. Antes de depender exclusivamente deste host, defina política de cópia externa e aceite o risco de perda do disco.
+
+Detalhes, opções, privilégios e limitações: [guia do backupctl](docs/backupctl.md).
 
 ## Reconciliação sem importação (decisão atual)
 
@@ -73,13 +83,9 @@ Esse snapshot antecede o cadastro autorizado. O Docker local já contém tenant/
 
 ## Restore/rehearsal e importação opcional futura
 
-Não ativar cobrança Railway, excluir seu volume nem restaurar sobre banco ativo. O trial expirado deixou o volume original preservado. Obter snapshot íntegro/autorizado ou selecionar backup cifrado com **RPO explicitamente aceito**; um backup anterior pode não conter as quatro avaliações recentes nem o ledger mais novo. **Bootstrap vazio não significa que os dados Railway foram migrados.**
+O procedimento simplificado de ensaio é `./backupctl verify --identity /caminho/privado/age-identity.txt` (inclua `--backup ARQUIVO` para selecionar um backup específico). Internamente ele reutiliza `scripts/restore-isolated.sh`, que restaura em banco PostgreSQL 18 independente, recusa dados preexistentes e verifica migration 015, RLS forçada e `pncp_app` sem SUPERUSER/BYPASSRLS.
 
-```bash
-./scripts/restore-isolated.sh pncp-restore-review /path/snapshot.dump.age /path/identity.txt
-```
-
-O script exige projeto `pncp-restore-*`, recusa destino que contenha objetos de usuário, usa stream age→pg_restore em transação e preserva volumes/origem. Depois de migrations/grants, exige postflight metadata-only: migration 015, role `pncp_app` não-superuser/NOBYPASSRLS, RLS habilitada/forçada em `company_opportunities` e em todas as tabelas com `company_id`. Não comunica sucesso se a verificação falhar. Restore só em banco novo, com PG18. Validar contagens, migrations, políticas RLS, tenant/session, reservas desconhecidas, claims/outbox/feedback e backup. Aplicar o grant de runtime após importação. Após aceite humano, escolha esse projeto restaurado para o cutover e configure porta/envs; não sobrescreva o banco novo já usado por outro ambiente.
+**Não** restaurar sobre o banco ativo, não apagar volumes sem aceite, não ligar worker e não assumir que o backup Docker contém dados do Railway antigo. Restore real, RTO/RPO e eventuais importações futuras continuam sujeitos à autorização de cada ambiente; o ledger atual não substitui o histórico de reservas anterior.
 
 ## Verificação local da V1 (sem GitHub Actions)
 
