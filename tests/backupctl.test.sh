@@ -28,6 +28,7 @@ cat > "$tmp/fixture/scripts/restore-isolated.sh" <<'RESTORE'
 printf 'restore %s %s\n' "$1" "$2" >> "$TRACE"
 [[ "$1" =~ ^pncp-restore-check-[0-9]{14}-[0-9a-f]{8}$ ]] || exit 98
 [[ "$2" == *'.dump.age' ]] || exit 97
+[[ ${RESTORE_PREFLIGHT_FAIL:-0} == 0 ]] || exit 42
 [[ ${RESTORE_FAIL:-0} == 0 ]]
 RESTORE
 cat > "$tmp/bin/docker" <<'DOCKER'
@@ -65,6 +66,11 @@ grep -q '^PASS: backup decrypted, restored' "$tmp/stdout" || fail 'Verify missin
 : > "$tmp/trace"
 pass "$cli" verify --backup "$archive_old" --identity "$identity" --cleanup
 grep -Eq '^docker compose -p pncp-restore-check-[0-9]{14}-[0-9a-f]{8} down --volumes$' "$tmp/trace" || fail 'Cleanup wrong project scope'
+: > "$tmp/trace"
+reject env RESTORE_PREFLIGHT_FAIL=1 "$cli" verify --identity "$identity" --cleanup
+grep -q 'BEFORE creating the isolated database' "$tmp/stderr" || fail 'Incorrect age identity message'
+! grep -q 'retained for investigation' "$tmp/stderr" || fail 'Preflight failure falsely claims a DB exists'
+! grep -q ' down --volumes' "$tmp/trace" || fail 'Preflight failure unexpectedly attempted cleanup'
 : > "$tmp/trace"
 reject env RESTORE_FAIL=1 "$cli" verify --identity "$identity" --cleanup
 ! grep -q ' down --volumes' "$tmp/trace" || fail 'Failed restore unexpectedly deleted volume'

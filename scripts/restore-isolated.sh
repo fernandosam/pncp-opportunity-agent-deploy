@@ -9,6 +9,20 @@ exec 9>".secrets/$project.lock"
 flock -n 9 || { echo 'Restore already in progress for this project.' >&2; exit 1; }
 backup=$(realpath "$2"); identity=$(realpath "$3")
 [[ -s "$backup" && -s "$identity" && "$backup" == *.age ]] || { echo 'Encrypted backup and identity required.' >&2; exit 1; }
+# Fail before creating a PostgreSQL volume if the age identity cannot decrypt
+# this archive. The PGDMP header is checked and the entire authenticated stream
+# is consumed; decrypted data is never saved to disk or printed to the host.
+# Image postgres:18-alpine + age + bash already contains all required tools.
+if ! docker compose -p "$project" --profile maintenance run --rm --no-deps -T \
+  --entrypoint bash -v "$backup:/restore/backup.age:ro" -v "$identity:/restore/identity:ro" \
+  backup -o pipefail -c \
+  'age --decrypt --identity /restore/identity /restore/backup.age | { IFS= read -r -N 5 magic && [[ "$magic" == PGDMP ]] && cat >/dev/null; }' \
+  >/dev/null; then
+  echo 'FAIL: Backup preflight: age identity did not decrypt a complete PostgreSQL custom-format archive. No isolated database was started.' >&2
+  echo 'Use the original AGE-SECRET-KEY-1 private identity matching backup.recipient (not a .dump.age file, public age1... recipient, or recipient-encrypted key).' >&2
+  exit 42
+fi
+printf '%s\n' 'PASS: backup decrypted and PGDMP header authenticated; starting isolated PostgreSQL restore.'
 # No --volumes deletion, no source database connection, no plaintext dump file.
 docker compose -p "$project" up -d --wait database
 count=$(docker compose -p "$project" exec -T database psql -U pncp_admin -d pncp_opportunity_agent -Atc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p','S','v','m') and n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%';")

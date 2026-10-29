@@ -95,8 +95,15 @@ case "$command" in
     fi
     started=$(date +%s)
     printf 'Verifying encrypted backup in isolated project %s\n' "$project"
-    if ! bash scripts/restore-isolated.sh "$project" "$archive" "$identity"; then
-      printf 'FAIL: restore verification failed; isolated project %s retained for investigation.\n' "$project" >&2
+    if bash scripts/restore-isolated.sh "$project" "$archive" "$identity"; then
+      : # Full restore and security postflight passed.
+    else
+      status=$?
+      if [[ $status -eq 42 ]]; then
+        printf '%s\n' 'FAIL: age identity/archive preflight failed BEFORE creating the isolated database. Check the original private age key; no restore volume was created by this attempt.' >&2
+      else
+        printf 'FAIL: restore verification failed; isolated project %s retained for investigation.\n' "$project" >&2
+      fi
       exit 1
     fi
     elapsed=$(( $(date +%s) - started ))
