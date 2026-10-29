@@ -45,6 +45,23 @@ O comando **não mede o RTO ponta a ponta** de um incidente, não prova que o ú
 
 **Armazenamento atual:** backups age locais, janela de até 7 dias, scheduler diário às 03:30 UTC. Se o host/disco for perdido, arquivos somente locais também se perdem. Enviar cópias criptografadas para outro destino é uma decisão de custo, acesso e retenção separada.
 
+## Diagnóstico de chave age e preflight de restauração
+
+Se aparecer `identity file is encrypted with age but not with a passphrase`, **o caminho passado em `--identity` não é uma identidade privada age válida neste formato**; pode ser um arquivo age cifrado para um destinatário, como o próprio `.dump.age`, ou uma cópia da identidade criptografada para outro destinatário. O arquivo `.secrets/backup.recipient` contém somente a **chave pública**, começando com `age1...`, e **não descriptografa** backups. A identidade privada nativa geralmente contém uma linha iniciada por `AGE-SECRET-KEY-1`; também existem identidades SSH ou age protegidas por senha compatíveis com a ferramenta. **Não mostre ou publique o conteúdo da identidade privada.**
+
+A identidade original deve corresponder ao destinatário público usado para cifrar o backup. Busque-a no cofre/backup privado onde foi gerada. **Não gere uma chave nova esperando abrir backups antigos**. Se a chave privada foi perdida, a cópia antiga pode ser irrecuperável; interrompa o processo e investigue o cofre antes de alterar as rotinas.
+
+**Correção após a falha inicial:** `scripts/restore-isolated.sh` passou a executar uma pré-verificação da identidade **antes de iniciar o contêiner PostgreSQL**. Uma execução `docker compose ... run --rm --no-deps` com o serviço de manutenção `backup` tenta descriptografar o arquivo completo, verifica a assinatura inicial `PGDMP` do dump customizado e consome toda a saída sem gravar plaintext nem a imprimir. Se falhar, o script retorna código **42**, e `backupctl` informa que nenhum banco isolado foi criado por essa tentativa. O error `pg_restore: input file is too short` deixa de ser emitido para falha detectável no preflight. Uma pré-verificação aprovada não substitui o restore completo nem prova o RTO/RPO.
+
+Um projeto isolado **já criado por uma tentativa anterior** não é removido automaticamente. Por exemplo, para examinar sem modificações um projeto que falhou:
+
+```bash
+docker compose -p pncp-restore-check-20261029001101-e8a1cb27 ps -a
+docker volume ls --filter label=com.docker.compose.project=pncp-restore-check-20261029001101-e8a1cb27
+```
+
+Confirme que os recursos pertencem exclusivamente ao projeto descartável antes de considerar sua remoção. Nunca execute `down --volumes` no projeto ativo da aplicação.
+
 ## Testes e limite da evidência
 
 `bash tests/backupctl.test.sh` testa encaminhamento dos quatro comandos, escolha do backup mais recente, bloqueio de arquivos inseguros, chave ausente, limpeza apenas sob autorização, colisão de projeto e preservação após falha. Usa comandos e restauração simulados: um PASS aqui **não prova que o arquivo age real é restaurável**.
