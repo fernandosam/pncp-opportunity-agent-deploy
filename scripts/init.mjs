@@ -24,7 +24,7 @@ save('.env.worker', {...common,
   OPENAI_MAX_COST_PER_CALL_USD:'0.034', WORKER_MAX_LLM_COST_USD_PER_DAY:'0.20',
   WORKER_COMPANY_IDS:'', WORKER_MAX_EVALUATIONS_PER_RUN:'4',
   PNCP_ENRICHMENT_ENABLED:'true', PNCP_PUBLICATION_FALLBACK_ENABLED:'false',
-  PNCP_TIMEOUT_MS:'30000', WORKER_POLL_INTERVAL_MS:'5000',
+  PNCP_TIMEOUT_MS:'30000',
 });
 save('.env.database', {POSTGRES_USER:'pncp_admin', POSTGRES_DB:'pncp_opportunity_agent', POSTGRES_PASSWORD:admin, PNCP_RUNTIME_PASSWORD:runtime});
 save('.env.migrate', {...common, DATABASE_URL:`postgresql://pncp_admin:${admin}@database:5432/pncp_opportunity_agent`});
