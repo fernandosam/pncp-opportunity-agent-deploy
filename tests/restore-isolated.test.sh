@@ -53,10 +53,10 @@ expect_fail bash "$script" pncp-restore-fixture "$file" missing.identity
 [[ ! -s "$tmp/log" ]] || fail 'Missing identity accessed Docker'
 : > "$tmp/log"
 expect_fail env MOCK_PREFLIGHT_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
-[[ $(cat "$tmp/log") == PREFLIGHT ]] || fail 'Failed age identity must not create an isolated DB'
+[[ $(cat "$tmp/log") == PREFLIGHT ]] || fail 'Wrong age identity must not start isolated DB'
 : > "$tmp/log"
 expect_fail env MOCK_TARGET_COUNT=2 bash "$script" pncp-restore-fixture "$file" "$identity"
-[[ $(cat "$tmp/log") == 
+[[ $(cat "$tmp/log") == $'PREFLIGHT\nSTART\nPRECHECK' ]] || fail 'Occupied target was written to'
 : > "$tmp/log"
 expect_fail env MOCK_AGE_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
 ! grep -q '^MIGRATE$' "$tmp/log" || fail 'Migration after failed decrypt'
@@ -71,45 +71,6 @@ expect_pass bash "$script" pncp-restore-fixture "$file" "$identity"
 for step in PREFLIGHT START PRECHECK DECRYPT RESTORE MIGRATE POSTFLIGHT; do
   [[ $(grep -cx "$step" "$tmp/log") == 1 ]] || fail "Missing or duplicate $step"
 done
-[[ $(head -n 3 "$tmp/log") == 
+[[ $(head -n 3 "$tmp/log") == $'PREFLIGHT\nSTART\nPRECHECK' ]] || fail 'Identity check must precede DB creation'
 [[ $(tail -n 2 "$tmp/log") == $'MIGRATE\nPOSTFLIGHT' ]] || fail 'Migration/postflight out of order'
-printf '%s\n' 'PASS: isolated restore rejects wrong identity before starting DB, refuses occupied target, stops after decrypt/pg_restore failure, and requires RLS postflight.'
-PREFLIGHT\nSTART\nPRECHECK' ]] || fail 'Occupied target was written to'
-: > "$tmp/log"
-expect_fail env MOCK_AGE_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
-! grep -q '^MIGRATE$' "$tmp/log" || fail 'Migration after failed decrypt'
-: > "$tmp/log"
-expect_fail env MOCK_RESTORE_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
-! grep -q '^MIGRATE$' "$tmp/log" || fail 'Migration after failed pg_restore'
-: > "$tmp/log"
-expect_fail env MOCK_POSTFLIGHT=fail bash "$script" pncp-restore-fixture "$file" "$identity"
-grep -q '^POSTFLIGHT$' "$tmp/log" || fail 'Postflight was skipped'
-: > "$tmp/log"
-expect_pass bash "$script" pncp-restore-fixture "$file" "$identity"
-for step in START PRECHECK DECRYPT RESTORE MIGRATE POSTFLIGHT; do
-  [[ $(grep -cx "$step" "$tmp/log") == 1 ]] || fail "Missing or duplicate $step"
-done
-[[ $(head -n 2 "$tmp/log") == $'START\nPRECHECK' ]] || fail 'Missing preflight'
-[[ $(tail -n 2 "$tmp/log") == $'MIGRATE\nPOSTFLIGHT' ]] || fail 'Migration/postflight out of order'
-printf '%s\n' 'PASS: isolated restore rejects invalid/missing sources and occupied targets, stops after decrypt/pg_restore failure, and requires RLS postflight.'
-PREFLIGHT\nSTART\nPRECHECK' ]] || fail 'Identity preflight must precede DB creation'
-[[ $(tail -n 2 "$tmp/log") == $'MIGRATE\nPOSTFLIGHT' ]] || fail 'Migration/postflight out of order'
-printf '%s\n' 'PASS: isolated restore rejects invalid/missing sources and occupied targets, stops after decrypt/pg_restore failure, and requires RLS postflight.'
-PREFLIGHT\nSTART\nPRECHECK' ]] || fail 'Occupied target was written to'
-: > "$tmp/log"
-expect_fail env MOCK_AGE_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
-! grep -q '^MIGRATE$' "$tmp/log" || fail 'Migration after failed decrypt'
-: > "$tmp/log"
-expect_fail env MOCK_RESTORE_FAIL=1 bash "$script" pncp-restore-fixture "$file" "$identity"
-! grep -q '^MIGRATE$' "$tmp/log" || fail 'Migration after failed pg_restore'
-: > "$tmp/log"
-expect_fail env MOCK_POSTFLIGHT=fail bash "$script" pncp-restore-fixture "$file" "$identity"
-grep -q '^POSTFLIGHT$' "$tmp/log" || fail 'Postflight was skipped'
-: > "$tmp/log"
-expect_pass bash "$script" pncp-restore-fixture "$file" "$identity"
-for step in START PRECHECK DECRYPT RESTORE MIGRATE POSTFLIGHT; do
-  [[ $(grep -cx "$step" "$tmp/log") == 1 ]] || fail "Missing or duplicate $step"
-done
-[[ $(head -n 2 "$tmp/log") == $'START\nPRECHECK' ]] || fail 'Missing preflight'
-[[ $(tail -n 2 "$tmp/log") == $'MIGRATE\nPOSTFLIGHT' ]] || fail 'Migration/postflight out of order'
-printf '%s\n' 'PASS: isolated restore rejects invalid/missing sources and occupied targets, stops after decrypt/pg_restore failure, and requires RLS postflight.'
+printf '%s\n' 'PASS: failed age preflight creates no DB; isolated restore rejects occupied target and stops after pg_restore/postflight failure.'
