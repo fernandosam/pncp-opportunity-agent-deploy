@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Unified operator interface. Delegates backup and restore to the existing audited scripts.
+set -euo pipefail
+umask 077
+cd "$(dirname "$0")"
+
+die() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
+usage() {
+  cat <<'USAGE'
+Usage: ./backupctl status|run|list|verify [--backup FILE] [--identity FILE] [--cleanup]
+  status  Read-only: scheduler, backup freshness, permissions and PostgreSQL TLS.
+  run     Create an encrypted backup and apply the existing seven-day retention policy.
+  list    Show encrypted backup names, file sizes and timestamps (no decryption).
+  verify  Restore into a new isolated Docker project and check migration 015 and RLS.
+          Without --backup, selects the newest local pncp-*.dump.age archive.
+          Without --identity, prompts on an interactive terminal for its local path.
+          By default retains the isolated volume for inspection; --cleanup removes
+          ONLY the new verification project's volumes AFTER successful verification.
+USAGE
+}
+backup_directory=backups
+validate_archive() {
+  local archive=$1 mode
+  [[ -f $archive && -s $archive && ! -L $archive && $archive == *.dump.age ]] || die 'Encrypted .dump.age regular file required (no symlinks)'
+  mode=$(stat -c '%a' -- "$archive") || die 'Cannot inspect archive permissions'
+  [[ $mode == 600 || $mode == 400 ]] || die 'Backup must have restrictive permissions (600 or 400)'
+}
+newest_archive() {
+  local path mtime best='' best_time=-1
+  shopt -s nullglob
+  for path in "$backup_directory"/pncp-*.dump.age; do
+    validate_archive "$path"
+    mtime=$(stat -c '%Y' -- "$path") || die 'Cannot read archive timestamp'
+    if (( mtime > best_time )); then best=$path; best_time=$mtime; fi
+  done
+  [[ -n $best ]] || die 'No encrypted backup available; run ./backupctl run first'
+  printf '%s\n' "$best"
+}
+[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+command=$1; shift
+case "$command" in
+  help|-h|--help) [[ $# -eq 0 ]] || die 'help takes no arguments'; usage ;;
+  status)
+    [[ $# -eq 0 ]] || die 'status takes no arguments'
+    bash scripts/check-operations-readonly.sh
+    ;;
+  run)
+    [[ $# -eq 0 ]] || die 'run takes no arguments'
+    bash scripts/backup.sh
+    bash scripts/check-backup-health.sh
+    ;;
+  list)
+    [[ $# -eq 0 ]] || die 'list takes no arguments'
+    [[ -d $backup_directory ]] || die 'Backup directory does not exist'
+    found=0
+    shopt -s nullglob
+    for file in "$backup_directory"/pncp-*.dump.age; do
+      validate_archive "$file"
+      printf '%s | %s bytes | %s UTC\n' "${file##*/}" \
+        "$(stat -c '%s' -- "$file")" "$(date -u -d "@$(stat -c '%Y' -- "$file")" '+%Y-%m-%d %H:%M:%S')"
+      found=$((found + 1))
+    done
+    (( found > 0 )) || printf '%s\n' 'No encrypted backups found.'
+    ;;
+  verify)
+    archive='' identity='' cleanup=false
+    while (( $# > 0 )); do
+      case "$1" in
+        --backup|--identity)
+          [[ $# -ge 2 && -n $2 ]] || die "$1 requires a file path"
+          if [[ $1 == --backup ]]; then archive=$2; else identity=$2; fi
+          shift 2 ;;
+        --cleanup) cleanup=true; shift ;;
+        *) die 'Unknown verify argument; run ./backupctl --help' ;;
+      esac
+    done
+    if [[ -z $archive ]]; then archive=$(newest_archive); fi
+    validate_archive "$archive"
+    if [[ -z $identity ]]; then
+      [[ -t 0 ]] || die 'Supply --identity /path/to/private-age-identity for non-interactive verification'
+      read -r -p 'Caminho do arquivo de identidade privada age (não o conteúdo): ' identity
+    fi
+    [[ -f $identity && -s $identity && ! -L $identity ]] || die 'Private age identity file is missing or invalid'
+    mode=$(stat -c '%a' -- "$identity") || die 'Cannot inspect identity permissions'
+    [[ $mode == 600 || $mode == 400 ]] || die 'Age identity must have permissions 600 or 400'
+    command -v docker >/dev/null || die 'Docker is required for verification'
+    command -v openssl >/dev/null || die 'OpenSSL is required for unique project naming'
+    stamp=$(date -u +%Y%m%d%H%M%S)
+    nonce=$(openssl rand -hex 4) || die 'Cannot generate isolated project name'
+    [[ $nonce =~ ^[0-9a-f]{8}$ ]] || die 'Invalid random project suffix'
+    project="pncp-restore-check-${stamp}-${nonce}"
+    [[ $project =~ ^pncp-restore-check-[0-9]{14}-[0-9a-f]{8}$ ]] || die 'Unsafe isolated project name'
+    if docker volume inspect "${project}_database" >/dev/null 2>&1; then
+      die 'Isolated verification volume already exists; refusing to reuse it'
+    fi
+    started=$(date +%s)
+    printf 'Verifying encrypted backup in isolated project %s\n' "$project"
+    if ! bash scripts/restore-isolated.sh "$project" "$archive" "$identity"; then
+      printf 'FAIL: restore verification failed; isolated project %s retained for investigation.\n' "$project" >&2
+      exit 1
+    fi
+    elapsed=$(( $(date +%s) - started ))
+    printf 'PASS: backup decrypted, restored and security-checked in %s seconds; project %s.\n' "$elapsed" "$project"
+    printf '%s\n' 'RTO sample is restore duration only. Actual recovery objective and off-host durability are not certified.'
+    if [[ $cleanup == true ]]; then
+      docker compose -p "$project" down --volumes || die "Isolated cleanup failed; inspect project $project"
+      printf 'PASS: isolated verification project %s and its volumes removed.\n' "$project"
+    else
+      printf 'Isolated database retained. For cleanup, run a new verify with --cleanup; this run did not delete volumes.\n'
+    fi
+    ;;
+  *) usage >&2; exit 2 ;;
+esac
