@@ -42,6 +42,20 @@ No host já provisionado, `bash scripts/check-operations-readonly.sh` observa es
 
 Este check não comprova decrypt/restore, PITR, cópia externa, notificações entregues, execução do expurgo de dados pelo worker, recuperação de jobs ou acerto do RTO/RPO. Registre saída segura e evidências da execução real na #25; a verificação e a intervenção devem permanecer separadas.
 
+## 1.2. Comandos simplificados para a operação de backup
+
+A interface recomendada passa a ser `./backupctl`, sem substituir os scripts subjacentes:
+
+```bash
+./backupctl status
+./backupctl list
+./backupctl run
+# Somente no Docker real com uma identidade age privada disponível:
+./backupctl verify --identity /local/seguro/age-identity.txt
+```
+
+Para remover o volume **somente do novo ensaio após sucesso**, `./backupctl verify --identity /local/seguro/age-identity.txt --cleanup`. A restauração permanece isolada em `pncp-restore-check-*` e usa `restore-isolated.sh`; o modo padrão preserva o volume para auditoria. `bash tests/backupctl.test.sh` testa falhas e controle de escopo com Docker simulado. Consulte [guia do backupctl](./backupctl.md). **Nenhum teste sintético deve ser contado como prova de restore real/RTO/RPO.**
+
 ## 2. Exercícios em ambiente isolado — com operador no host
 
 | Exercício | Como registrar evidência | Aceite |
