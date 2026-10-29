@@ -29,6 +29,13 @@ Configure `RESEND_API_KEY`/remetente em `.env.app` e `.env.worker` para autentic
 
 ## Worker opt-in
 
+O worker refatorado da aplicação delega somente agendamento/dispatch ao `pg-boss`, com checkpoints, claims e outbox persistidos em PostgreSQL. O bootstrap `scripts/init.mjs` **não gera mais** `WORKER_POLL_INTERVAL_MS` (configuração anteriormente inefetiva); arquivos `.env.worker` existentes não precisam ser recriados. Verificar a geração de um ambiente sintético sem banco/Docker:
+
+```bash
+node tests/init-env.test.mjs
+```
+
+
 **Estado do onboarding (2026-10-14):** migration de autenticação `015_auth_capability_rls` aplicada **somente no Docker local**; recebimento do magic link, login HTTPS e acesso ao perfil confirmados pelo responsável. O dashboard tenant-scoped foi implantado localmente, mas não havia briefings reais persistidos. Worker continua desligado, allowlist vazia e fluxo positivo/entrega/feedback/Precision@K não comprovados. Não extrapolar a aprovação local da #31 para produção. [Evidências](docs/local-onboarding.md).
 
 Worker não inicia no boot padrão. A reconciliação sem importação foi concluída: [relatório](docs/data-reconciliation.md). Este é um banco novo/vazio; importação não é requisito. Antes de ligar, cadastrar empresa/responsável/perfil reais e conferir tenant IDs, credenciais, fontes e orçamento autorizado:
